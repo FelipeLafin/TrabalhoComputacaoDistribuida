@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Chat WebSocket</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: Arial;
+    background: #1e1e2f;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.topo {
+    padding: 10px;
+    background: #2a2a40;
+    display: flex;
+    gap: 10px;
+}
+
+.system {
+    color: #ffd700; /* amarelo bonito */
+    font-style: italic;
+}
+
+#chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+.input-area {
+    display: flex;
+    padding: 10px;
+    background: #2a2a40;
+    gap: 10px;
+}
+
+input, button {
+    padding: 8px;
+    border-radius: 6px;
+    border: none;
+}
+
+button {
+    background: #5865f2;
+    color: white;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #4752c4;
+}
+
+.admin { color: red; font-weight: bold; }
+.error { color: orange; }
+</style>
+</head>
+
+<body>
+
+<div class="topo">
+    <input id="nome" placeholder="Nome">
+    <input id="sala" placeholder="Sala">
+    <button onclick="logar()">Entrar</button>
+    <button onclick="logout()">Logout</button>
+</div>
+
+<div id="chat"></div>
+
+<div class="input-area">
+    <input id="msg" placeholder="Mensagem">
+    <button onclick="enviar()">Enviar</button>
+    <button onclick="broadcast()">📢</button>
+</div>
+
+<script>
+
+const ws = new WebSocket('ws://localhost:8080');
+
+let salaAtual = null;
+let nomeAtual = null;
+
+ws.onmessage = (event) => {
+    let data;
+
+    try {
+        data = JSON.parse(event.data);
+    } catch {
+        console.log("Mensagem inválida recebida");
+        return;
+    }
+
+    if (data.room && data.room !== salaAtual) return;
+
+    const chat = document.getElementById("chat");
+    const msg = document.createElement("div");
+
+    if (data.style === "admin" || (data.user && data.user.includes("ADMIN"))) {
+        msg.classList.add("admin");
+    }
+
+    if (data.style === "error") {
+        msg.classList.add("error");
+    }
+
+    if (data.style === "system") {
+        msg.classList.add("system");
+    }
+    msg.innerHTML = `<b>${data.user || "Sistema"}:</b> ${data.text}`;
+
+    chat.appendChild(msg);
+    chat.scrollTop = chat.scrollHeight;
+};
+
+function logar() {
+    nomeAtual = document.getElementById('nome').value;
+    salaAtual = document.getElementById('sala').value;
+
+    if (!nomeAtual || !salaAtual) {
+        alert("Preencha nome e sala!");
+        return;
+    }
+
+    ws.send(JSON.stringify({
+        type: "login",
+        user: nomeAtual,
+        room: salaAtual,
+        isAdmin: nomeAtual.includes("ADMIN")
+    }));
+
+    limparChat();
+    sistema(`${nomeAtual} entrou na sala "${salaAtual}"`);
+}
+
+function enviar() {
+    const texto = document.getElementById("msg").value;
+
+    if (!salaAtual) {
+        alert("Entre em uma sala primeiro!");
+        return;
+    }
+
+    if (!texto) return;
+
+    ws.send(JSON.stringify({
+        type: "message",
+        text: texto
+    }));
+
+    document.getElementById("msg").value = "";
+}
+
+function broadcast() {
+    const texto = document.getElementById("msg").value;
+
+    if (!texto) return;
+
+    ws.send(JSON.stringify({
+        type: "admin_broadcast",
+        text: texto
+    }));
+
+    document.getElementById("msg").value = "";
+}
+
+function logout() {
+    nomeAtual = document.getElementById('nome').value;
+    salaAtual = document.getElementById('sala').value;
+
+    ws.send(JSON.stringify({
+        type: "logout",
+        user: nomeAtual,
+        room: salaAtual
+    }));
+
+    sistema(`${nomeAtual} saiu da sala "${salaAtual}"`);
+    ws.close();
+    location.reload();
+}
+
+function limparChat() {
+    document.getElementById("chat").innerHTML = "";
+}
+
+function sistema(texto) {
+    const chat = document.getElementById("chat");
+    const msg = document.createElement("div");
+
+    msg.innerHTML = `<b>Sistema:</b> ${texto}`;
+
+    chat.appendChild(msg);
+}
+
+</script>
+
+</body>
+</html>
